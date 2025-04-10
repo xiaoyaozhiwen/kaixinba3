@@ -1,0 +1,90 @@
+name: BPB Panel Auto-Obfuscation
+
+on:
+  push:
+    branches: [ main ]
+  schedule:
+    - cron: "0 17 * * *"  # 每日 UTC 17:00 (北京时间次日01:00)
+
+env:
+  NPM_REGISTRY: "https://registry.npmmirror.com"
+
+jobs:
+  obfuscation:
+    name: Script Obfuscation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      # =====================
+      # 代码库准备
+      # =====================
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # =====================
+      # Node.js 环境
+      # =====================
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.19.0"  # 精确版本锁定
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      # =====================
+      # 依赖安装
+      # =====================
+      - name: Install Dependencies
+        run: |
+          sudo npm install -g javascript-obfuscator@4.0.2 \
+            --registry=${{ env.NPM_REGISTRY }} \
+            --no-audit \
+            --fund=false
+
+      # =====================
+      # 核心处理流程
+      # =====================
+      - name: Process Worker Script
+        timeout-minutes: 5
+        run: |
+          # 下载源文件 (带重试机制)
+          for i in {1..3}; do
+            wget -q -O origin.js \
+              "https://raw.githubusercontent.com/bia-pain-bache/BPB-Worker-Panel/main/build/unobfuscated-worker.js" \
+              && break || sleep 10
+          done
+
+          # 文件验证
+          if [ $(wc -c < origin.js) -lt 1024 ]; then
+            echo "::error file=origin.js::文件小于 1KB 可能下载失败"
+            exit 89
+          fi
+
+          # 混淆处理
+          javascript-obfuscator origin.js \
+            --output _worker.js \
+            --compact true \
+            --string-array-encoding rc4 \
+            --transform-object-keys true \
+            --unicode-escape-sequence true
+
+          # 生成版本标记
+          echo "// Build: $(date +%Y%m%d-%H%M%S)" >> _worker.js
+
+      # =====================
+      # 结果提交
+      # =====================
+      - name: Auto Commit
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          branch: main
+          commit_message: ":robot: chore(worker): Auto-update obfuscated script [ci skip]"
+          file_pattern: |
+            _worker.js
+            origin.js
+          commit_user_name: "BPB Maintenance Bot"
+          commit_user_email: "bpb-bot@users.noreply.github.com"
