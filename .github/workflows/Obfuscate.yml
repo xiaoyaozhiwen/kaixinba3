@@ -1,87 +1,55 @@
-name: BPB Panel Auto-Obfuscation
+name: Build and Obfuscate BPB Panel
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
   schedule:
-    - cron: "0 17 * * *"  # 每日 UTC 17:00 (北京时间次日01:00)
+    # 每天凌晨1:00运行
+    - cron: "0 1 * * *"
 
-env:
-  NPM_REGISTRY: "https://registry.npmmirror.com"
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    steps:
-      # 1. 代码检出
-      - uses: actions/checkout@v4
 
-      # 2. Node.js 环境配置
-      - name: Setup Node.js
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Node.js 环境
         uses: actions/setup-node@v4
         with:
-          node-version: '20'  # 固定 LTS 版本
-          cache: 'npm'        # 明确声明包管理器类型
-          cache-dependency-path: 'package-lock.json'  # 强制指定锁定文件路径 ‌:ml-citation{ref="3,8" data="citationList"}
+          node-version: "latest"
 
-      # 3. 独立缓存控制
-      - name: Cache Dependencies
-        uses: actions/cache@v4  # 必须使用 v4+ 版本 ‌:ml-citation{ref="4,5" data="citationList"}
-        with:
-          path: |
-            ~/.npm
-            node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
-
-      # 4. 依赖安装
-- name: Install Dependencies
+      - name: 安装依赖项
         run: |
-          sudo npm install -g javascript-obfuscator@4.0.2 \
-            --registry=${{ env.NPM_REGISTRY }} \
-            --no-audit \
-            --fund=false
+          npm install -g javascript-obfuscator
 
-
-      # =====================
-      # 核心处理流程
-      # =====================
-      - name: Process Worker Script
-        timeout-minutes: 5
+      - name: 下载 BPB worker.js
         run: |
-          # 下载源文件 (带重试机制)
-          for i in {1..3}; do
-            wget -q -O origin.js \
-              "https://raw.githubusercontent.com/bia-pain-bache/BPB-Worker-Panel/main/build/unobfuscated-worker.js" \
-              && break || sleep 10
-          done
+          wget -O origin.js https://raw.githubusercontent.com/bia-pain-bache/BPB-Worker-Panel/main/build/unobfuscated-worker.js
 
-          # 文件验证
-          if [ $(wc -c < origin.js) -lt 1024 ]; then
-            echo "::error file=origin.js::文件小于 1KB 可能下载失败"
-            exit 89
-          fi
-
-          # 混淆处理
-          javascript-obfuscator origin.js \
-            --output _worker.js \
+      - name: 混淆 BPB worker.js
+        run: |
+          javascript-obfuscator origin.js --output _worker.js \
             --compact true \
-            --string-array-encoding rc4 \
+            --control-flow-flattening false \
+            --dead-code-injection false \
+            --identifier-names-generator mangled \
+            --rename-globals false \
+            --string-array true \
+            --string-array-encoding 'rc4' \
+            --string-array-threshold 0.75 \
             --transform-object-keys true \
             --unicode-escape-sequence true
 
-          # 生成版本标记
-          echo "// Build: $(date +%Y%m%d-%H%M%S)" >> _worker.js
-
-      # =====================
-      # 结果提交
-      # =====================
-      - name: Auto Commit
+      - name: 提交更改
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           branch: main
-          commit_message: ":robot: chore(worker): Auto-update obfuscated script [ci skip]"
-          file_pattern: |
-            _worker.js
-            origin.js
-          commit_user_name: "BPB Maintenance Bot"
-          commit_user_email: "bpb-bot@users.noreply.github.com"
+          commit_message: ':arrow_up: 更新最新的 BPB 面板'
+          commit_author: 'github-actions[bot] <github-actions[bot]@users.noreply.github.com>'
+          push_options: '--set-upstream'
