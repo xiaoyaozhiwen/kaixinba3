@@ -34,7 +34,6 @@ jobs:
           key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
 
       # 4. 依赖安装
-      - run: npm ci  # 推荐使用 ci 模式安装
 - name: Install Dependencies
         run: |
           sudo npm install -g javascript-obfuscator@4.0.2 \
