@@ -10,40 +10,38 @@ env:
   NPM_REGISTRY: "https://registry.npmmirror.com"
 
 jobs:
-  obfuscation:
-    name: Script Obfuscation
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-
     steps:
-      # =====================
-      # 代码库准备
-      # =====================
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          persist-credentials: false
+      # 1. 代码检出
+      - uses: actions/checkout@v4
 
-      # =====================
-      # Node.js 环境
-      # =====================
+      # 2. Node.js 环境配置
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20.19.0"  # 精确版本锁定
-          cache: 'npm'
-          cache-dependency-path: package-lock.json
+          node-version: '20'  # 固定 LTS 版本
+          cache: 'npm'        # 明确声明包管理器类型
+          cache-dependency-path: 'package-lock.json'  # 强制指定锁定文件路径 ‌:ml-citation{ref="3,8" data="citationList"}
 
-      # =====================
-      # 依赖安装
-      # =====================
-      - name: Install Dependencies
+      # 3. 独立缓存控制
+      - name: Cache Dependencies
+        uses: actions/cache@v4  # 必须使用 v4+ 版本 ‌:ml-citation{ref="4,5" data="citationList"}
+        with:
+          path: |
+            ~/.npm
+            node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+
+      # 4. 依赖安装
+      - run: npm ci  # 推荐使用 ci 模式安装
+- name: Install Dependencies
         run: |
           sudo npm install -g javascript-obfuscator@4.0.2 \
             --registry=${{ env.NPM_REGISTRY }} \
             --no-audit \
             --fund=false
+
 
       # =====================
       # 核心处理流程
